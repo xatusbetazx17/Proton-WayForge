@@ -41,7 +41,7 @@ This script will automatically set up a custom Proton build in ```$HOME/.steam/r
 Ensure that you have installed the necessary dependencies in Desktop Mode.
 Once installed, you can select Proton WayForge as the compatibility tool for games in Steam.
 
-## Modified Script with Performance Optimization and Library Installation
+## Script to Download and Launch Balena Etcher:
 
 ```bash
 #!/bin/bash
