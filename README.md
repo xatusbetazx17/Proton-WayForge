@@ -13,7 +13,9 @@ Proton WayForge is a customized version of Proton optimized for Wayland environm
 Clone this repository and run the `proton_wayforge.sh` script:
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/Proton-WayForge.git
+git clone https://github.com/xatusbetazx17/Proton-WayForge.git
 cd Proton-WayForge
 chmod +x proton_wayforge.sh
 ./proton_wayforge.sh
+
+
