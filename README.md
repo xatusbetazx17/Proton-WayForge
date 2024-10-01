@@ -19,7 +19,7 @@ git clone https://github.com/xatusbetazx17/Proton-WayForge.git
 Run the following command to open the nano text editor and create the proton_wayforge.sh file:
 
 ```bash
-nano proton_wayforge.sh
+nano proton_WayForge.sh
 ```
 ## 3. Save and Exit nano:
    - To save the file in **nano**, press `CTRL + O` (to write out the file) and hit `Enter`.
