@@ -46,202 +46,116 @@ Once installed, you can select Proton WayForge as the compatibility tool for gam
 ```bash
 #!/bin/bash
 
-# Steam Deck (SteamOS) custom Proton script with Wine support, Wayland optimization, minimal X11 usage, 
-# game-specific optimizations, and automatic library installation.
-# Works in both Gaming Mode and Desktop Mode
-# Includes dependency installation, environment setup, and customized Proton/Wine handling
+# Arch Linux ISO and Balena Etcher AppImage download URLs
+ARCH_ISO_URL="https://mirrors.edge.kernel.org/archlinux/iso/latest/archlinux-x86_64.iso"
+ARCH_ISO_PATH="$HOME/archlinux.iso"
+ETCHER_APPIMAGE_URL="https://github.com/balena-io/etcher/releases/download/v1.5.122/balenaEtcher-1.5.122-x64.AppImage"
+ETCHER_APPIMAGE_PATH="$HOME/balenaEtcher.AppImage"
 
-# Proton compatibility tool folder for Steam to recognize custom Proton builds
-PROTON_CUSTOM_DIR="$HOME/.steam/root/compatibilitytools.d/custom_proton_wayforge"
-
-# Function to detect if we are in Steam Deck Gaming Mode
-detect_gaming_mode() {
-    if [ -n "$STEAM_RUNTIME" ]; then
-        echo "Running in Steam Deck Gaming Mode."
-        return 0
+# Function to detect if we are in SteamOS or Arch Linux Live environment
+detect_environment() {
+    if grep -q "SteamOS" /etc/os-release; then
+        echo "Running in SteamOS."
+        IS_STEAMOS=1
+    elif grep -q "ARCH" /etc/os-release; then
+        echo "Running in Arch Linux live environment."
+        IS_STEAMOS=0
     else
-        echo "Running in Steam Deck Desktop Mode."
-        return 1
+        echo "Unknown environment. Exiting."
+        exit 1
     fi
 }
 
-# Function to install Wayland and gaming dependencies (only for Desktop Mode)
-install_dependencies() {
-    if detect_gaming_mode; then
-        echo "No need to install dependencies in Gaming Mode (handled by Steam)."
+# Function to download the Arch Linux ISO
+download_arch_iso() {
+    echo "Downloading the latest Arch Linux ISO..."
+    wget -O "$ARCH_ISO_PATH" "$ARCH_ISO_URL"
+
+    if [[ $? -eq 0 ]]; then
+        echo "Arch Linux ISO downloaded successfully to $ARCH_ISO_PATH."
     else
-        echo "Installing necessary libraries and dependencies in Desktop Mode..."
-
-        # Install Wayland and additional gaming libraries
-        sudo pacman -Sy --needed wayland wayland-protocols wlroots sway pipewire pipewire-pulse \
-            pipewire-alsa pipewire-jack wireplumber qt5-wayland gtk3-wayland xwayland \
-            libsdl2 libsdl2-wayland vulkan-icd-loader dxvk wine
-
-        echo "Dependencies installed."
+        echo "Failed to download the Arch Linux ISO. Please check your connection."
+        exit 1
     fi
 }
 
-# Function to configure the environment to prefer Wayland over X11
-configure_wayland_environment() {
-    echo "Configuring the environment to use Wayland..."
+# Function to download Balena Etcher AppImage
+download_etcher_appimage() {
+    echo "Downloading Balena Etcher AppImage..."
+    wget -O "$ETCHER_APPIMAGE_PATH" "$ETCHER_APPIMAGE_URL"
 
-    # Force SDL2 to use Wayland if available
-    export SDL_VIDEODRIVER=wayland
-
-    # Set up Qt applications to use the Wayland backend
-    export QT_QPA_PLATFORM=wayland
-
-    # Set GTK applications to prefer Wayland
-    export GDK_BACKEND=wayland
-
-    # Disable compositor for games in fullscreen to optimize performance
-    export __GL_GSYNC_ALLOWED=0
-    echo "Environment configured for Wayland."
-}
-
-# Function to check if we're running in a Wayland session
-check_wayland_session() {
-    if [ "$XDG_SESSION_TYPE" == "wayland" ]; then
-        echo "Wayland session detected."
+    if [[ $? -eq 0 ]]; then
+        echo "Balena Etcher AppImage downloaded successfully to $ETCHER_APPIMAGE_PATH."
+        chmod +x "$ETCHER_APPIMAGE_PATH"  # Make it executable
     else
-        echo "Warning: Not running in Wayland. Falling back to X11."
-        export SDL_VIDEODRIVER=x11
+        echo "Failed to download Balena Etcher AppImage. Please check your connection."
+        exit 1
     fi
 }
 
-# Function to set up a custom Proton directory
-setup_custom_proton() {
-    echo "Setting up custom Proton directory..."
-
-    # Create custom Proton folder if it doesn't exist
-    if [ ! -d "$PROTON_CUSTOM_DIR" ]; then
-        mkdir -p "$PROTON_CUSTOM_DIR"
+# Function to launch Balena Etcher
+launch_etcher() {
+    echo "Launching Balena Etcher..."
+    "$ETCHER_APPIMAGE_PATH" &
+    
+    if [[ $? -eq 0 ]]; then
+        echo "Balena Etcher launched successfully. Please use the GUI to flash the Arch Linux ISO to the USB drive."
+    else
+        echo "Failed to launch Balena Etcher."
+        exit 1
     fi
-
-    # Create a basic Proton-like structure for Steam to recognize
-    echo "Creating custom Proton tool info..."
-    cat << EOF > "$PROTON_CUSTOM_DIR/toolmanifest.vdf"
-    "toolmanifest"
-    {
-        "appname"    "Custom Proton WayForge"
-        "appid"    "proton_custom_wayland"
-        "baseinstallfolder"    "compatibilitytools.d"
-        "installpath"    "$PROTON_CUSTOM_DIR"
-    }
-EOF
-
-    echo "Custom Proton directory set up at: $PROTON_CUSTOM_DIR"
 }
 
-# Function to install game-specific libraries and patches (DXVK, Vulkan, etc.)
-install_game_libraries() {
-    local game_name="$1"
-
-    echo "Installing necessary libraries for game: $game_name"
-
-    case "$game_name" in
-        "SomeGame")
-            # Install specific libraries for SomeGame
-            echo "Installing DXVK and Vulkan optimizations for SomeGame..."
-            # Install DXVK and apply any necessary tweaks
-            sudo pacman -S dxvk vulkan-tools
-            ;;
-        "OtherGame")
-            # Install specific libraries for OtherGame
-            echo "Applying performance tweaks for OtherGame..."
-            # Example: disable Steam overlay
-            export STEAM_DISABLE_OVERLAY=1
-            ;;
-        *)
-            echo "No specific tweaks for $game_name. Proceeding with default setup."
-            ;;
-    esac
+# Function to prompt the user to reboot manually into the USB
+prompt_reboot() {
+    echo -e "\n###########################################"
+    echo "Arch Linux live USB has been prepared."
+    echo "Please reboot your Steam Deck and boot from the USB drive."
+    echo "Once you are booted into the Arch Linux live environment, run this script again."
+    echo "###########################################"
 }
 
-# Function to handle anti-cheat systems (read-only warning, no bypass)
-handle_anti_cheat_warning() {
-    echo "Checking for potential anti-cheat systems..."
-    echo "WARNING: Modifying or bypassing anti-cheat systems without approval could result in account bans."
-    echo "Always verify that the anti-cheat system supports Proton or Wine before proceeding."
+# Function to install KDE, GParted, and other necessary tools in the live environment
+install_tools_in_live_env() {
+    echo "Installing KDE, GParted, and other necessary tools..."
+    sudo pacman -Sy --noconfirm plasma gparted
+
+    if [[ $? -eq 0 ]]; then
+        echo "Tools installed successfully."
+    else
+        echo "Failed to install tools."
+        exit 1
+    fi
 }
 
-# Function to run the Python part of the script for Wine/Proton logic
-run_python_script() {
-    python3 - <<END
-import os
-import subprocess
-import sys
-
-# Function to check if Proton or Wine is installed and available
-def check_runtime():
-    try:
-        result = subprocess.run(['which', 'proton'], capture_output=True, check=True, text=True)
-        if result.returncode == 0:
-            print("Proton is installed and available.")
-        else:
-            print("Proton not found, checking for Wine.")
-            result = subprocess.run(['which', 'wine'], capture_output=True, check=True, text=True)
-            if result.returncode == 0:
-                print("Wine is installed and available.")
-            else:
-                print("Neither Proton nor Wine is available. Please install one of them.")
-                sys.exit(1)
-    except subprocess.CalledProcessError:
-        print("Error checking Proton or Wine installation.")
-        sys.exit(1)
-
-# Function to launch the game using either Proton or Wine
-def launch_game(game_path):
-    try:
-        # Try launching with Proton first
-        result = subprocess.run(['proton', 'run', game_path], check=False)
-        if result.returncode != 0:
-            print("Proton failed. Falling back to Wine.")
-            subprocess.run(['wine', game_path], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error launching game with Proton or Wine: {e}")
-        sys.exit(1)
-
-# Check if Proton or Wine is installed
-check_runtime()
-
-# Set game path (modify this path to your game's executable)
-game_executable = '/path/to/your/game/executable'
-
-# Launch the game with Proton or Wine
-launch_game(game_executable)
-END
+# Function to run GParted for partition resizing
+resize_var_partition() {
+    echo "Opening GParted for partition resizing..."
+    sudo gparted
+    echo "Once partition resizing is done, reboot into SteamOS."
 }
 
-# Main function to detect environment and run the game
+# Main function for handling both environments
 main() {
-    echo "Starting setup for Steam Deck with Wayland optimization, Wine/Proton integration, and custom Proton-like behavior..."
+    # Detect if we are in SteamOS or Arch Linux live environment
+    detect_environment
 
-    # Install necessary dependencies and libraries
-    install_dependencies
-
-    # Detect Wayland session (for Desktop Mode)
-    check_wayland_session
-
-    # Configure the environment to prefer Wayland over X11
-    configure_wayland_environment
-
-    # Handle game-specific libraries and patches (DXVK, Vulkan, etc.)
-    local game_name="SomeGame"  # Change to detect the actual game being run
-    install_game_libraries "$game_name"
-
-    # Check and warn about anti-cheat systems
-    handle_anti_cheat_warning
-
-    # Set up the custom Proton directory to emulate Proton-like behavior
-    setup_custom_proton
-
-    # Run the Python script to handle Wine/Proton and launch the game
-    run_python_script
+    if [[ $IS_STEAMOS -eq 1 ]]; then
+        # If we are in SteamOS, download the ISO and Balena Etcher, and launch Etcher
+        download_arch_iso
+        download_etcher_appimage
+        launch_etcher
+        prompt_reboot
+    else
+        # If we are in Arch Linux live environment, install tools and resize partitions
+        install_tools_in_live_env
+        resize_var_partition
+    fi
 }
 
 # Run the main function
 main
+
 ```
 ### Breakdown of Key Features:
 
