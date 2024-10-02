@@ -41,24 +41,43 @@ This script will automatically set up a custom Proton build in ```$HOME/.steam/r
 Ensure that you have installed the necessary dependencies in Desktop Mode.
 Once installed, you can select Proton WayForge as the compatibility tool for games in Steam.
 
+
+## Note you need to do this before Execute this script:
+
+## Disable steam os read mode
+
+
+## Download Endevour os iso or Torrent:
+
+## Endevour os Link:
+~~~
+https://endeavouros.com/
+~~~
+
+## Once Iso is donwload It Burn it with balena etche ron your Usb
+
+
+The script will open a torrent but cine you havent on your computer will said an error just simply donwload a torrent and donwload it using the tool that will be installed.
+
+
 ## Script to Download and Launch Balena Etcher:
 
 ```bash
 #!/bin/bash
 
-# Arch Linux ISO and Balena Etcher AppImage download URLs
-ARCH_ISO_URL="https://mirrors.edge.kernel.org/archlinux/iso/latest/archlinux-x86_64.iso"
-ARCH_ISO_PATH="$HOME/archlinux.iso"
+# Torrent file provided locally
+ENDEAVOUROS_TORRENT_PATH="/mnt/data/EndeavourOS_Endeavour_neo-2024.09.22.iso.torrent"
+ENDEAVOUROS_ISO_PATH="$HOME/endeavouros.iso"
 ETCHER_APPIMAGE_URL="https://github.com/balena-io/etcher/releases/download/v1.5.122/balenaEtcher-1.5.122-x64.AppImage"
 ETCHER_APPIMAGE_PATH="$HOME/balenaEtcher.AppImage"
 
-# Function to detect if we are in SteamOS or Arch Linux Live environment
+# Function to detect if we are in SteamOS or EndeavourOS Live environment
 detect_environment() {
     if grep -q "SteamOS" /etc/os-release; then
         echo "Running in SteamOS."
         IS_STEAMOS=1
-    elif grep -q "ARCH" /etc/os-release; then
-        echo "Running in Arch Linux live environment."
+    elif grep -q "EndeavourOS" /etc/os-release; then
+        echo "Running in EndeavourOS live environment."
         IS_STEAMOS=0
     else
         echo "Unknown environment. Exiting."
@@ -66,15 +85,30 @@ detect_environment() {
     fi
 }
 
-# Function to download the Arch Linux ISO
-download_arch_iso() {
-    echo "Downloading the latest Arch Linux ISO..."
-    wget -O "$ARCH_ISO_PATH" "$ARCH_ISO_URL"
+# Function to check if qBittorrent is installed
+check_torrent_client() {
+    if ! command -v qbittorrent >/dev/null 2>&1; then
+        echo "qBittorrent not found. Installing qBittorrent..."
+        sudo pacman -Sy --noconfirm qbittorrent
+    fi
+
+    if command -v qbittorrent >/dev/null 2>&1; then
+        echo "qBittorrent installed successfully."
+    else
+        echo "Failed to install qBittorrent. Exiting."
+        exit 1
+    fi
+}
+
+# Function to launch qBittorrent with the provided torrent file
+launch_qbittorrent() {
+    echo "Launching qBittorrent to download the EndeavourOS ISO..."
+    qbittorrent "$ENDEAVOUROS_TORRENT_PATH" &
 
     if [[ $? -eq 0 ]]; then
-        echo "Arch Linux ISO downloaded successfully to $ARCH_ISO_PATH."
+        echo "qBittorrent launched successfully. Please use the GUI to monitor the download."
     else
-        echo "Failed to download the Arch Linux ISO. Please check your connection."
+        echo "Failed to launch qBittorrent."
         exit 1
     fi
 }
@@ -97,9 +131,9 @@ download_etcher_appimage() {
 launch_etcher() {
     echo "Launching Balena Etcher..."
     "$ETCHER_APPIMAGE_PATH" &
-    
+
     if [[ $? -eq 0 ]]; then
-        echo "Balena Etcher launched successfully. Please use the GUI to flash the Arch Linux ISO to the USB drive."
+        echo "Balena Etcher launched successfully. Please use the GUI to flash the EndeavourOS ISO to the USB drive."
     else
         echo "Failed to launch Balena Etcher."
         exit 1
@@ -109,9 +143,9 @@ launch_etcher() {
 # Function to prompt the user to reboot manually into the USB
 prompt_reboot() {
     echo -e "\n###########################################"
-    echo "Arch Linux live USB has been prepared."
+    echo "EndeavourOS live USB has been prepared."
     echo "Please reboot your Steam Deck and boot from the USB drive."
-    echo "Once you are booted into the Arch Linux live environment, run this script again."
+    echo "Once you are booted into the EndeavourOS live environment, run this script again."
     echo "###########################################"
 }
 
@@ -137,17 +171,22 @@ resize_var_partition() {
 
 # Main function for handling both environments
 main() {
-    # Detect if we are in SteamOS or Arch Linux live environment
+    # Detect if we are in SteamOS or EndeavourOS live environment
     detect_environment
 
     if [[ $IS_STEAMOS -eq 1 ]]; then
-        # If we are in SteamOS, download the ISO and Balena Etcher, and launch Etcher
-        download_arch_iso
+        # Check and install torrent client if necessary
+        check_torrent_client
+
+        # Launch qBittorrent to download the ISO
+        launch_qbittorrent
+
+        # Download and launch Balena Etcher
         download_etcher_appimage
         launch_etcher
         prompt_reboot
     else
-        # If we are in Arch Linux live environment, install tools and resize partitions
+        # If we are in EndeavourOS live environment, install tools and resize partitions
         install_tools_in_live_env
         resize_var_partition
     fi
