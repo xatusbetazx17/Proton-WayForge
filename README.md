@@ -59,6 +59,18 @@ Once installed, you can select Proton WayForge as the compatibility tool for gam
 sudo steamos-readonly disable 
 ~~~
 
+## Before the script:
+Creates this directory into external sd on the steam deck to prevent change the system so all thing will be write here instead inside the main disk on the steam deck.
+
+## Step 1: Ensure Proper Directory Setup
+Choose a Separate Mount Point: Use an SD card, external USB, or another partition not already used for mounting /var or other critical system directories.
+
+## For example, if you're using /dev/mmcblk0 for an SD card, it will avoid conflicts with the internal SSD or /dev/nvme0n1.
+```
+sudo mkdir -p /run/media/deck/sdcard/overlay
+sudo mkdir -p /run/media/deck/sdcard/workdir
+```
+
 ## Make /Var  Bigger
 Since this will require a lot of temporary files, you will need to resize your ```/var``` partition first. Due to the immutability of the system, ```/var``` needs to be made larger. 
 To achieve this, you will need to use OverlayFS.
@@ -68,32 +80,32 @@ To achieve this, you will need to use OverlayFS.
 ```bash
 #!/bin/bash
 
-# Directory where the SD card or external drive will be mounted
-MOUNT_DIR="/mnt/upper"
+# Use the SD card or external storage for overlay
+MOUNT_DIR="/run/media/deck/sdcard"  # Change this to your SD card or external storage location
 OVERLAY_DIR="$MOUNT_DIR/overlay"
 WORK_DIR="$MOUNT_DIR/workdir"
 SERVICE_NAME="overlayfs-var.service"
 
-# Function to detect and mount the external storage device (SD card or external drive)
+# Function to detect and mount external storage (SD card or external drive)
 mount_external_storage() {
     echo "Detecting available storage devices (SD card or external drive)..."
     lsblk -o NAME,SIZE,TYPE,MOUNTPOINT | grep "disk"
-
+    
     read -p "Please enter the device name to use (e.g., /dev/mmcblk0 or /dev/sdX): " DEVICE
 
     # Check if the device is already mounted
     MOUNTPOINT=$(lsblk -no MOUNTPOINT "$DEVICE")
-
+    
     if [ -n "$MOUNTPOINT" ]; then
         echo "Device $DEVICE is already mounted at $MOUNTPOINT."
         MOUNT_DIR="$MOUNTPOINT"
     else
         # Create a mount point if not already mounted
         sudo mkdir -p "$MOUNT_DIR"
-
-        # Mount the external storage to /mnt/upper
+        
+        # Mount the external storage to /run/media/deck
         sudo mount "$DEVICE" "$MOUNT_DIR"
-
+        
         if [[ $? -eq 0 ]]; then
             echo "External storage mounted at $MOUNT_DIR."
         else
@@ -106,13 +118,13 @@ mount_external_storage() {
 # Function to set up OverlayFS
 setup_overlayfs() {
     echo "Setting up OverlayFS on /var..."
-
-    # Create necessary directories
+    
+    # Ensure that the overlay and work directories exist on the external storage
     sudo mkdir -p "$OVERLAY_DIR" "$WORK_DIR"
 
-    # Mount OverlayFS on /var
+    # Mount OverlayFS on /var using the external storage
     sudo mount -t overlay overlay -o lowerdir=/var,upperdir="$OVERLAY_DIR",workdir="$WORK_DIR" /var
-
+    
     if [[ $? -eq 0 ]]; then
         echo "OverlayFS has been set up on /var successfully."
     else
@@ -152,27 +164,6 @@ EOF
     echo "Systemd service $SERVICE_NAME created and enabled."
 }
 
-# Function to resize /var partitions to 5GB each
-resize_var_partition() {
-    echo "Detecting /var partitions for resizing..."
-
-    VAR_PARTITIONS=$(lsblk -o NAME,MOUNTPOINT | grep "/var" | awk '{print $1}')
-
-    if [ -z "$VAR_PARTITIONS" ]; then
-        echo "No /var partitions detected. Exiting."
-        exit 1
-    fi
-
-    for part in $VAR_PARTITIONS; do
-        echo "Resizing /dev/$part to 5GB..."
-        sudo parted /dev/"$(echo "$part" | sed 's/[0-9]//g')" resizepart "$(echo "$part" | sed 's/[^0-9]//g')" 5GB
-        sudo resize2fs /dev/$part 5G
-        echo "Partition /dev/$part resized to 5GB."
-    done
-
-    echo "All /var partitions resized successfully."
-}
-
 # Main function for handling both environments
 main() {
     # Step 1: Detect and mount external storage (SD card or USB drive)
@@ -189,6 +180,7 @@ main() {
 
 # Run the main function
 main
+
 
 ```
 
