@@ -19,12 +19,197 @@ chmod +x proton_wayforge.sh
 ./proton_wayforge.sh
 
 ```
+## DeckFS Overlay
+Open a Terminal: If you’re in Steam Deck’s desktop mode or any other Linux environment, open a terminal window.
+
+## Open Nano to Create the File:
+
+## In the terminal, type the following command to open nano and create a new script file:
+bash
+Copy code
+```nano overlayfs-setup.sh```
+This will open nano with a new, blank file named overlayfs-setup.sh.
+Paste the Script:
+
+## Once the editor is open, you can paste the script you want to use. For example, if it's the OverlayFS script, copy the script content from your clipboard and paste it into the nano window (right-click and select paste, or use Ctrl+Shift+V).
+Save the Script:
+
+## After pasting the script, press **Ctrl+O** (that's the letter "O", not zero) to write the file (save it).
+It will prompt you with File Name to Write: overlayfs-setup.sh, press Enter to confirm.
+Exit Nano:
+
+## Once the file is saved, press Ctrl+X to exit nano.
+Make the Script Executable:
+
+## To make the script executable, type the following command:
+bash
+Copy code
+```chmod +x overlayfs-setup.sh```
+Run the Script:
+
+## Now, you can run the script by typing:
+bash
+Copy code
+```./overlayfs-setup.sh```
+
+~~~bash
+
+~~~
 
 ## Usage
 
 This script will automatically set up a custom Proton build in ```$HOME/.steam/root/compatibilitytools.d/```
 Ensure that you have installed the necessary dependencies in Desktop Mode.
 Once installed, you can select Proton WayForge as the compatibility tool for games in Steam.
+
+## Disable steam os Read only  
+
+~~~bash
+sudo steamos-readonly disable 
+~~~
+
+## Make /Var  Bigger
+Since this will require a lot of temporary files, you will need to resize your ```/var``` partition first. Due to the immutability of the system, ```/var``` needs to be made larger. 
+To achieve this, you will need to use OverlayFS.
+
+## DeckFS Overlay
+
+```bash
+#!/bin/bash
+
+# Directory where the SD card or external drive will be mounted
+MOUNT_DIR="/mnt/upper"
+OVERLAY_DIR="$MOUNT_DIR/overlay"
+WORK_DIR="$MOUNT_DIR/workdir"
+SERVICE_NAME="overlayfs-var.service"
+
+# Function to detect and mount the external storage device (SD card or external drive)
+mount_external_storage() {
+    echo "Detecting available storage devices (SD card or external drive)..."
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT | grep "disk"
+
+    read -p "Please enter the device name to use (e.g., /dev/mmcblk0 or /dev/sdX): " DEVICE
+
+    # Check if the device is already mounted
+    MOUNTPOINT=$(lsblk -no MOUNTPOINT "$DEVICE")
+
+    if [ -n "$MOUNTPOINT" ]; then
+        echo "Device $DEVICE is already mounted at $MOUNTPOINT."
+        MOUNT_DIR="$MOUNTPOINT"
+    else
+        # Create a mount point if not already mounted
+        sudo mkdir -p "$MOUNT_DIR"
+
+        # Mount the external storage to /mnt/upper
+        sudo mount "$DEVICE" "$MOUNT_DIR"
+
+        if [[ $? -eq 0 ]]; then
+            echo "External storage mounted at $MOUNT_DIR."
+        else
+            echo "Failed to mount the external storage. Please check your device and try again."
+            exit 1
+        fi
+    fi
+}
+
+# Function to set up OverlayFS
+setup_overlayfs() {
+    echo "Setting up OverlayFS on /var..."
+
+    # Create necessary directories
+    sudo mkdir -p "$OVERLAY_DIR" "$WORK_DIR"
+
+    # Mount OverlayFS on /var
+    sudo mount -t overlay overlay -o lowerdir=/var,upperdir="$OVERLAY_DIR",workdir="$WORK_DIR" /var
+
+    if [[ $? -eq 0 ]]; then
+        echo "OverlayFS has been set up on /var successfully."
+    else
+        echo "Failed to set up OverlayFS. Please check the directories and try again."
+        exit 1
+    fi
+}
+
+# Function to create a systemd service to persist OverlayFS after reboot
+create_systemd_service() {
+    echo "Creating systemd service for persistent OverlayFS..."
+
+    # Create a systemd service file
+    sudo bash -c "cat > /etc/systemd/system/$SERVICE_NAME" <<EOF
+[Unit]
+Description=OverlayFS for /var on Steam Deck
+DefaultDependencies=no
+Before=local-fs.target
+Wants=local-fs.target
+After=systemd-remount-fs.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/mount -t overlay overlay -o lowerdir=/var,upperdir=$OVERLAY_DIR,workdir=$WORK_DIR /var
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload systemd to recognize the new service
+    sudo systemctl daemon-reload
+
+    # Enable the service to start at boot
+    sudo systemctl enable "$SERVICE_NAME"
+
+    echo "Systemd service $SERVICE_NAME created and enabled."
+}
+
+# Function to resize /var partitions to 5GB each
+resize_var_partition() {
+    echo "Detecting /var partitions for resizing..."
+
+    VAR_PARTITIONS=$(lsblk -o NAME,MOUNTPOINT | grep "/var" | awk '{print $1}')
+
+    if [ -z "$VAR_PARTITIONS" ]; then
+        echo "No /var partitions detected. Exiting."
+        exit 1
+    fi
+
+    for part in $VAR_PARTITIONS; do
+        echo "Resizing /dev/$part to 5GB..."
+        sudo parted /dev/"$(echo "$part" | sed 's/[0-9]//g')" resizepart "$(echo "$part" | sed 's/[^0-9]//g')" 5GB
+        sudo resize2fs /dev/$part 5G
+        echo "Partition /dev/$part resized to 5GB."
+    done
+
+    echo "All /var partitions resized successfully."
+}
+
+# Main function for handling both environments
+main() {
+    # Step 1: Detect and mount external storage (SD card or USB drive)
+    mount_external_storage
+
+    # Step 2: Set up OverlayFS
+    setup_overlayfs
+
+    # Step 3: Create a systemd service to persist the overlay across reboots and updates
+    create_systemd_service
+
+    echo "OverlayFS setup completed and made persistent across updates. /var is now using OverlayFS with external storage."
+}
+
+# Run the main function
+main
+
+```
+
+## Maintenance:
+
+If you ever want to disable or remove this setup, you can stop and disable the systemd service by running:
+```bash
+Copy code
+sudo systemctl stop overlayfs-var.service
+sudo systemctl disable overlayfs-var.service
+```
+Then, you can remove the overlay mount manually if needed.
 
 ## Modified Script with Performance Optimization and Library Installation
 
@@ -228,6 +413,9 @@ main() {
 # Run the main function
 main
 ```
+
+
+
 ### Breakdown of Key Features:
 
 ## Game-Specific Libraries and Optimizations:
