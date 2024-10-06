@@ -196,7 +196,6 @@ main
 
 If you ever want to disable or remove this setup, you can stop and disable the systemd service by running:
 ```bash
-Copy code
 sudo systemctl stop overlayfs-var.service
 sudo systemctl disable overlayfs-var.service
 ```
