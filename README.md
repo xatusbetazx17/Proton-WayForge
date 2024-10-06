@@ -25,8 +25,6 @@ Open a Terminal: If you’re in Steam Deck’s desktop mode or any other Linux e
 ## Open Nano to Create the File:
 
 ## In the terminal, type the following command to open nano and create a new script file:
-bash
-Copy code
 ```nano overlayfs-setup.sh```
 This will open nano with a new, blank file named overlayfs-setup.sh.
 Paste the Script:
@@ -42,19 +40,12 @@ Exit Nano:
 Make the Script Executable:
 
 ## To make the script executable, type the following command:
-bash
-Copy code
 ```chmod +x overlayfs-setup.sh```
 Run the Script:
 
 ## Now, you can run the script by typing:
-bash
-Copy code
+
 ```./overlayfs-setup.sh```
-
-~~~bash
-
-~~~
 
 ## Usage
 
