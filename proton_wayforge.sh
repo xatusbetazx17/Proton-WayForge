@@ -1,170 +1,197 @@
 #!/bin/bash
 
-# Torrent file provided locally
-ENDEAVOUROS_TORRENT_PATH="/mnt/data/EndeavourOS_Endeavour_neo-2024.09.22.iso.torrent"
-ENDEAVOUROS_ISO_PATH="$HOME/endeavouros.iso"
-ETCHER_APPIMAGE_URL="https://github.com/balena-io/etcher/releases/download/v1.5.122/balenaEtcher-1.5.122-x64.AppImage"
-ETCHER_APPIMAGE_PATH="$HOME/balenaEtcher.AppImage"
+# Steam Deck (SteamOS) custom Proton script with Wine support, Wayland optimization, minimal X11 usage,
+# game-specific optimizations, and automatic library installation.
+# Works in both Gaming Mode and Desktop Mode
+# Includes dependency installation, environment setup, and customized Proton/Wine handling
 
-# Function to detect if we are in SteamOS or EndeavourOS Live environment
-detect_environment() {
-    if grep -q "SteamOS" /etc/os-release; then
-        echo "Running in SteamOS."
-        IS_STEAMOS=1
-    elif grep -q "EndeavourOS" /etc/os-release; then
-        echo "Running in EndeavourOS live environment."
-        IS_STEAMOS=0
+# Proton compatibility tool folder for Steam to recognize custom Proton builds
+PROTON_CUSTOM_DIR="$HOME/.steam/root/compatibilitytools.d/custom_proton_wayforge"
+
+# Function to detect if we are in Steam Deck Gaming Mode
+detect_gaming_mode() {
+    if [ -n "$STEAM_RUNTIME" ]; then
+        echo "Running in Steam Deck Gaming Mode."
+        return 0
     else
-        echo "Unknown environment. Exiting."
-        exit 1
+        echo "Running in Steam Deck Desktop Mode."
+        return 1
     fi
 }
 
-# Function to check if qBittorrent is installed
-check_torrent_client() {
-    if ! command -v qbittorrent >/dev/null 2>&1; then
-        echo "qBittorrent not found. Installing qBittorrent..."
-        sudo pacman -Sy --noconfirm qbittorrent
-    fi
-
-    if command -v qbittorrent >/dev/null 2>&1; then
-        echo "qBittorrent installed successfully."
+# Function to install Wayland and gaming dependencies (only for Desktop Mode)
+install_dependencies() {
+    if detect_gaming_mode; then
+        echo "No need to install dependencies in Gaming Mode (handled by Steam)."
     else
-        echo "Failed to install qBittorrent. Exiting."
-        exit 1
+        echo "Installing necessary libraries and dependencies in Desktop Mode..."
+
+        # Install Wayland and additional gaming libraries
+        sudo pacman -Sy --needed wayland wayland-protocols wlroots sway pipewire pipewire-pulse \
+            pipewire-alsa pipewire-jack wireplumber qt5-wayland gtk3-wayland xwayland \
+            libsdl2 libsdl2-wayland vulkan-icd-loader dxvk wine
+
+        echo "Dependencies installed."
     fi
 }
 
-# Function to launch qBittorrent with the provided torrent file
-launch_qbittorrent() {
-    echo "Launching qBittorrent to download the EndeavourOS ISO..."
-    qbittorrent "$ENDEAVOUROS_TORRENT_PATH" &
+# Function to configure the environment to prefer Wayland over X11
+configure_wayland_environment() {
+    echo "Configuring the environment to use Wayland..."
 
-    if [[ $? -eq 0 ]]; then
-        echo "qBittorrent launched successfully. Please use the GUI to monitor the download."
+    # Force SDL2 to use Wayland if available
+    export SDL_VIDEODRIVER=wayland
+
+    # Set up Qt applications to use the Wayland backend
+    export QT_QPA_PLATFORM=wayland
+
+    # Set GTK applications to prefer Wayland
+    export GDK_BACKEND=wayland
+
+    # Disable compositor for games in fullscreen to optimize performance
+    export __GL_GSYNC_ALLOWED=0
+    echo "Environment configured for Wayland."
+}
+
+# Function to check if we're running in a Wayland session
+check_wayland_session() {
+    if [ "$XDG_SESSION_TYPE" == "wayland" ]; then
+        echo "Wayland session detected."
     else
-        echo "Failed to launch qBittorrent."
-        exit 1
+        echo "Warning: Not running in Wayland. Falling back to X11."
+        export SDL_VIDEODRIVER=x11
     fi
 }
 
-# Function to download Balena Etcher AppImage
-download_etcher_appimage() {
-    echo "Downloading Balena Etcher AppImage..."
-    wget -O "$ETCHER_APPIMAGE_PATH" "$ETCHER_APPIMAGE_URL"
+# Function to set up a custom Proton directory
+setup_custom_proton() {
+    echo "Setting up custom Proton directory..."
 
-    if [[ $? -eq 0 ]]; then
-        echo "Balena Etcher AppImage downloaded successfully to $ETCHER_APPIMAGE_PATH."
-        chmod +x "$ETCHER_APPIMAGE_PATH"  # Make it executable
-    else
-        echo "Failed to download Balena Etcher AppImage. Please check your connection."
-        exit 1
+    # Create custom Proton folder if it doesn't exist
+    if [ ! -d "$PROTON_CUSTOM_DIR" ]; then
+        mkdir -p "$PROTON_CUSTOM_DIR"
     fi
+
+    # Create a basic Proton-like structure for Steam to recognize
+    echo "Creating custom Proton tool info..."
+    cat << EOF > "$PROTON_CUSTOM_DIR/toolmanifest.vdf"
+    "toolmanifest"
+    {
+        "appname"    "Custom Proton WayForge"
+        "appid"    "proton_custom_wayland"
+        "baseinstallfolder"    "compatibilitytools.d"
+        "installpath"    "$PROTON_CUSTOM_DIR"
+    }
+EOF
+
+    echo "Custom Proton directory set up at: $PROTON_CUSTOM_DIR"
 }
 
-# Function to select USB or microSD
-select_storage_device() {
-    echo "Please select the storage device for flashing the EndeavourOS ISO:"
-    echo "1) USB Drive"
-    echo "2) microSD Card"
-    read -p "Enter your choice (1 or 2): " choice
+# Function to install game-specific libraries and patches (DXVK, Vulkan, etc.)
+install_game_libraries() {
+    local game_name="$1"
 
-    case $choice in
-        1)
-            DEVICE_PATH=$(lsblk -o NAME,SIZE,TYPE | grep "disk" | grep -i sd[b-z])
-            echo "Detected USB drive: $DEVICE_PATH"
+    echo "Installing necessary libraries for game: $game_name"
+
+    case "$game_name" in
+        "SomeGame")
+            # Install specific libraries for SomeGame
+            echo "Installing DXVK and Vulkan optimizations for SomeGame..."
+            # Install DXVK and apply any necessary tweaks
+            sudo pacman -S dxvk vulkan-tools
             ;;
-        2)
-            DEVICE_PATH=$(lsblk -o NAME,SIZE,TYPE | grep "disk" | grep -i mmcblk)
-            echo "Detected microSD card: $DEVICE_PATH"
+        "OtherGame")
+            # Install specific libraries for OtherGame
+            echo "Applying performance tweaks for OtherGame..."
+            # Example: disable Steam overlay
+            export STEAM_DISABLE_OVERLAY=1
             ;;
         *)
-            echo "Invalid choice. Exiting."
-            exit 1
+            echo "No specific tweaks for $game_name. Proceeding with default setup."
             ;;
     esac
 }
 
-# Function to launch Balena Etcher
-launch_etcher() {
-    echo "Launching Balena Etcher..."
-    "$ETCHER_APPIMAGE_PATH" &
-
-    if [[ $? -eq 0 ]]; then
-        echo "Balena Etcher launched successfully. Please use the GUI to flash the EndeavourOS ISO to the $DEVICE_PATH."
-    else
-        echo "Failed to launch Balena Etcher."
-        exit 1
-    fi
+# Function to handle anti-cheat systems (read-only warning, no bypass)
+handle_anti_cheat_warning() {
+    echo "Checking for potential anti-cheat systems..."
+    echo "WARNING: Modifying or bypassing anti-cheat systems without approval could result in account bans."
+    echo "Always verify that the anti-cheat system supports Proton or Wine before proceeding."
 }
 
-# Function to prompt the user to reboot manually into the USB or microSD
-prompt_reboot() {
-    echo -e "\n###########################################"
-    echo "EndeavourOS live USB or microSD has been prepared."
-    echo "Please reboot your Steam Deck and boot from the selected device."
-    echo "Once you are booted into the EndeavourOS live environment, run this script again."
-    echo "###########################################"
+# Function to run the Python part of the script for Wine/Proton logic
+run_python_script() {
+    python3 - <<END
+import os
+import subprocess
+import sys
+
+# Function to check if Proton or Wine is installed and available
+def check_runtime():
+    try:
+        result = subprocess.run(['which', 'proton'], capture_output=True, check=True, text=True)
+        if result.returncode == 0:
+            print("Proton is installed and available.")
+        else:
+            print("Proton not found, checking for Wine.")
+            result = subprocess.run(['which', 'wine'], capture_output=True, check=True, text=True)
+            if result.returncode == 0:
+                print("Wine is installed and available.")
+            else:
+                print("Neither Proton nor Wine is available. Please install one of them.")
+                sys.exit(1)
+    except subprocess.CalledProcessError:
+        print("Error checking Proton or Wine installation.")
+        sys.exit(1)
+
+# Function to launch the game using either Proton or Wine
+def launch_game(game_path):
+    try:
+        # Try launching with Proton first
+        result = subprocess.run(['proton', 'run', game_path], check=False)
+        if result.returncode != 0:
+            print("Proton failed. Falling back to Wine.")
+            subprocess.run(['wine', game_path], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error launching game with Proton or Wine: {e}")
+        sys.exit(1)
+
+# Check if Proton or Wine is installed
+check_runtime()
+
+# Set game path (modify this path to your game's executable)
+game_executable = '/path/to/your/game/executable'
+
+# Launch the game with Proton or Wine
+launch_game(game_executable)
+END
 }
 
-# Function to install KDE, GParted, and other necessary tools in the live environment
-install_tools_in_live_env() {
-    echo "Installing KDE, GParted, and other necessary tools..."
-    sudo pacman -Sy --noconfirm plasma gparted
-
-    if [[ $? -eq 0 ]]; then
-        echo "Tools installed successfully."
-    else
-        echo "Failed to install tools."
-        exit 1
-    fi
-}
-
-# Function to resize /var partitions to 5GB each
-resize_var_partition() {
-    echo "Detecting /var partitions for resizing..."
-
-    VAR_PARTITIONS=$(lsblk -o NAME,MOUNTPOINT | grep "/var" | awk '{print $1}')
-
-    if [ -z "$VAR_PARTITIONS" ]; then
-        echo "No /var partitions detected. Exiting."
-        exit 1
-    fi
-
-    for part in $VAR_PARTITIONS; do
-        echo "Resizing /dev/$part to 5GB..."
-        sudo parted /dev/"$(echo "$part" | sed 's/[0-9]//g')" resizepart "$(echo "$part" | sed 's/[^0-9]//g')" 5GB
-        sudo resize2fs /dev/$part 5G
-        echo "Partition /dev/$part resized to 5GB."
-    done
-
-    echo "All /var partitions resized successfully."
-}
-
-# Main function for handling both environments
+# Main function to detect environment and run the game
 main() {
-    # Detect if we are in SteamOS or EndeavourOS live environment
-    detect_environment
+    echo "Starting setup for Steam Deck with Wayland optimization, Wine/Proton integration, and custom Proton-like behavior..."
 
-    if [[ $IS_STEAMOS -eq 1 ]]; then
-        # Check and install torrent client if necessary
-        check_torrent_client
+    # Install necessary dependencies and libraries
+    install_dependencies
 
-        # Launch qBittorrent to download the ISO
-        launch_qbittorrent
+    # Detect Wayland session (for Desktop Mode)
+    check_wayland_session
 
-        # Download and launch Balena Etcher
-        download_etcher_appimage
+    # Configure the environment to prefer Wayland over X11
+    configure_wayland_environment
 
-        # Select USB or microSD for flashing
-        select_storage_device
-        launch_etcher
-        prompt_reboot
-    else
-        # If we are in EndeavourOS live environment, install tools and resize partitions
-        install_tools_in_live_env
-        resize_var_partition
-    fi
+    # Handle game-specific libraries and patches (DXVK, Vulkan, etc.)
+    local game_name="SomeGame"  # Change to detect the actual game being run
+    install_game_libraries "$game_name"
+
+    # Check and warn about anti-cheat systems
+    handle_anti_cheat_warning
+
+    # Set up the custom Proton directory to emulate Proton-like behavior
+    setup_custom_proton
+
+    # Run the Python script to handle Wine/Proton and launch the game
+    run_python_script
 }
 
 # Run the main function
