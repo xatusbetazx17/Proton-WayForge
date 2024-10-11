@@ -193,6 +193,12 @@ sudo systemctl disable overlayfs-var.service
 ```
 Then, you can remove the overlay mount manually if needed.
 
+
+## Notes:
+You need specify where the games are installed on example:
+```/run/media/deck/SN01T/steamapps/common```
+To do this you only need go to steam and click where this game si located or what ever you have it. 
+
 ## Modified Script with Performance Optimization and Library Installation
 
 ```bash
