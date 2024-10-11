@@ -198,11 +198,6 @@ Then, you can remove the overlay mount manually if needed.
 ```bash
 #!/bin/bash
 
-# Steam Deck (SteamOS) custom Proton script with Wine support, Wayland optimization, minimal X11 usage,
-# game-specific optimizations, and automatic library installation.
-# Works in both Gaming Mode and Desktop Mode
-# Includes dependency installation, environment setup, and customized Proton/Wine handling
-
 # Enable detailed debugging
 set -x
 
@@ -403,15 +398,17 @@ handle_anti_cheat_warning() {
 
 # Function to run the Python part of the script for Wine/Proton logic
 run_python_script() {
+    local game_executable="$1"
+
     python3 - <<END
 import os
 import subprocess
 import sys
 
 # Function to check if Proton or Wine is installed and available
-def check_runtime():
+def check_runtime(game_path):
     try:
-        # Check for Wine installation first
+        # Check for Wine installation
         result = subprocess.run(['which', 'wine'], capture_output=True, text=True)
         if result.returncode == 0:
             print("Wine is installed and available.")
@@ -419,10 +416,9 @@ def check_runtime():
             print("Neither Proton nor Wine is available. Please install one of them.")
             sys.exit(1)
 
-        # If we reach here, Wine is found
-        game_executable = input("Enter the path to your game's executable (leave blank to skip): ").strip()
-        if game_executable:
-            launch_game(game_executable)
+        # If game path is provided, launch it
+        if game_path:
+            launch_game(game_path)
         else:
             print("No executable provided. Skipping game launch.")
 
@@ -438,8 +434,11 @@ def launch_game(game_path):
         print(f"Error launching game with Wine: {e}")
         sys.exit(1)
 
-# Check if Wine is installed
-check_runtime()
+# Get the game executable path
+game_path = "$game_executable"
+
+# Check if Wine is installed and optionally launch the game
+check_runtime(game_path)
 END
 }
 
@@ -465,8 +464,11 @@ main() {
     # Check and warn about anti-cheat systems
     handle_anti_cheat_warning
 
+    # Get game executable path from the user (skip if left blank)
+    read -p "Enter the path to your game's executable (leave blank to skip): " game_executable
+
     # Run the Python script to handle Wine/Proton and launch the game
-    run_python_script
+    run_python_script "$game_executable"
 }
 
 # Run the main function
